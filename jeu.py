@@ -2,12 +2,19 @@ import pygame
 import pytmx
 import time
 import random
+import sys
 
 pygame.init()
 
 # Fenêtre
-screen = pygame.display.set_mode((1000, 650))
+WIDTH, HEIGHT = 1000, 650
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Maison Jeu")
+
+# Musique (exemple)
+pygame.mixer.music.load("background_music.mp3")
+pygame.mixer.music.set_volume(0.5)
+pygame.mixer.music.play(-1)
 
 # Charger la carte
 tmx_data = pytmx.load_pygame('map/maison.tmx')
@@ -20,7 +27,6 @@ for obj in tmx_data.objects:
         collision_rects.append(rect)
 
 # Caractéristiques du joueur
-player_color = (0, 255, 0)
 player_width = 15
 player_height = 15
 player_x = 100
@@ -40,64 +46,125 @@ lights_positions = [
 light_img = pygame.image.load('map/light.png').convert_alpha()
 light_img = pygame.transform.scale(light_img, (35, 35))
 
-# Gestion des lumières
+# Fonts
+font = pygame.font.SysFont("Arial", 20)
+big_font = pygame.font.SysFont("Comic Sans MS", 40)
+
+# Fonctions utilitaires
+def draw_button(text, x, y, width, height, color, hover_color, action=None):
+    mouse = pygame.mouse.get_pos()
+    click = pygame.mouse.get_pressed()
+    rect = pygame.Rect(x, y, width, height)
+
+    if rect.collidepoint(mouse):
+        pygame.draw.rect(screen, hover_color, rect)
+        if click[0] and action:
+            pygame.time.delay(200)
+            action()
+    else:
+        pygame.draw.rect(screen, color, rect)
+
+    text_surf = font.render(text, True, (255, 255, 255))
+    screen.blit(text_surf, (x + (width - text_surf.get_width()) // 2,
+                            y + (height - text_surf.get_height()) // 2))
+
+def rules_screen():
+    running = True
+    while running:
+        screen.fill((30, 30, 30))
+        rules = [
+            "But du jeu : éteindre les lumières allumées dans la maison.",
+            "Déplacez-vous avec les flèches directionnelles.",
+            "Appuyez sur ESPACE quand vous êtes sur une lumière pour l’éteindre.",
+            "Vous avez 60 secondes pour éteindre un maximum de lumières.",
+            "",
+            "Appuyez sur ÉCHAP pour revenir au menu."
+        ]
+        for i, line in enumerate(rules):
+            rendered = font.render(line, True, (255, 255, 255))
+            screen.blit(rendered, (50, 100 + i * 30))
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                running = False
+
+        pygame.display.flip()
+
+def options_screen():
+    running = True
+    volume = pygame.mixer.music.get_volume()
+
+    while running:
+        screen.fill((50, 50, 50))
+        title = big_font.render("Options", True, (255, 255, 255))
+        screen.blit(title, ((WIDTH - title.get_width()) // 2, 50))
+
+        vol_text = font.render(f"Volume musique : {int(volume * 100)}%", True, (255, 255, 255))
+        screen.blit(vol_text, (WIDTH // 2 - 100, 200))
+
+        draw_button("-", WIDTH // 2 - 80, 240, 40, 40, (100, 100, 100), (150, 150, 150),
+                    lambda: change_volume(-0.1))
+        draw_button("+", WIDTH // 2 + 40, 240, 40, 40, (100, 100, 100), (150, 150, 150),
+                    lambda: change_volume(0.1))
+        draw_button("Retour", WIDTH // 2 - 60, 320, 120, 40, (100, 0, 0), (150, 0, 0),
+                    lambda: exit_screen())
+
+        volume = pygame.mixer.music.get_volume()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+
+        pygame.display.flip()
+
+def change_volume(amount):
+    volume = pygame.mixer.music.get_volume()
+    volume = max(0.0, min(1.0, volume + amount))
+    pygame.mixer.music.set_volume(volume)
+
+def exit_screen():
+    pygame.event.post(pygame.event.Event(pygame.KEYDOWN, {'key': pygame.K_ESCAPE}))
+
+# Écran principal du menu
+def show_main_menu():
+    background = pygame.image.load("background.png")
+    background = pygame.transform.scale(background, (WIDTH, HEIGHT))
+    menu_running = True
+
+    while menu_running:
+        screen.blit(background, (0, 0))
+        title = big_font.render("Jeu des Lumières", True, (255, 255, 255))
+        screen.blit(title, ((WIDTH - title.get_width()) // 2, 80))
+
+        draw_button("Jouer", 400, 200, 200, 50, (0, 100, 0), (0, 150, 0), lambda: exit_screen())
+        draw_button("Règles du jeu", 400, 270, 200, 50, (0, 0, 100), (0, 0, 150), rules_screen)
+        draw_button("Options", 400, 340, 200, 50, (100, 100, 0), (150, 150, 0), options_screen)
+        draw_button("Quitter", 400, 410, 200, 50, (100, 0, 0), (150, 0, 0), lambda: pygame.quit() or sys.exit())
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                menu_running = False
+
+        pygame.display.flip()
+
+# Lancer le menu
+show_main_menu()
+
+# Variables du jeu
 lights_on = []
-light_timers = {}  # Nouveau : pour stocker l'heure d'allumage
+light_timers = {}
 lights_turned_off = 0
 current_light = None
-
-# Minuteur
-font = pygame.font.SysFont("Arial", 20)
 start_time = time.time()
 game_duration = 60
 game_over = False
 result_text = ""
 
-# Ajouter une page d'introduction
-def show_intro_screen():
-    intro_font = pygame.font.SysFont("Comic Sans MS", 40)  # Utilisation d'une belle police
-    instructions_font = pygame.font.SysFont("Arial", 24)
-
-    # Charger une image de fond pour l'introduction (modifier l'image selon ton choix)
-    intro_background = pygame.image.load("background.png")  # Remplacer par ton image de fond
-    intro_background = pygame.transform.scale(intro_background, (1000, 650))
-
-    screen.blit(intro_background, (0, 0))
-
-    # Texte principal
-    title_text = intro_font.render("Bienvenue dans le Jeu des Lumières!", True, (255, 255, 255))
-    screen.blit(title_text, ((screen.get_width() - title_text.get_width()) // 2, screen.get_height() // 4))
-
-    # Explication du jeu
-    instructions_text = instructions_font.render(
-        "But du jeu : éteindre les lumières allumées dans la maison", True, (255, 255, 255))
-    screen.blit(instructions_text, ((screen.get_width() - instructions_text.get_width()) // 2, screen.get_height() // 2))
-
-    # Instructions supplémentaires
-    more_instructions_text = instructions_font.render(
-        "Utilisez les flèches pour vous déplacer et la barre espace pour éteindre les lumières.", True, (255, 255, 255))
-    screen.blit(more_instructions_text, ((screen.get_width() - more_instructions_text.get_width()) // 2, screen.get_height() // 2 + 40))
-
-    # Appuyer sur une touche pour commencer
-    start_text = instructions_font.render("Appuyez sur une touche pour commencer...", True, (255, 255, 255))
-    screen.blit(start_text, ((screen.get_width() - start_text.get_width()) // 2, screen.get_height() // 1.5))
-
-    pygame.display.flip()
-
-    # Attendre que l'utilisateur appuie sur une touche
-    waiting = True
-    while waiting:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                quit()
-            if event.type == pygame.KEYDOWN:
-                waiting = False
-
-# Lancer l'écran d'introduction avant de commencer le jeu
-show_intro_screen()
-
-# Boucle principale
+# Boucle principale du jeu
 running = True
 clock = pygame.time.Clock()
 
@@ -113,30 +180,19 @@ while running:
             running = False
 
     keys = pygame.key.get_pressed()
-
     dx = dy = 0
-    if keys[pygame.K_LEFT]:
-        dx -= player_speed
-    if keys[pygame.K_RIGHT]:
-        dx += player_speed
-    if keys[pygame.K_UP]:
-        dy -= player_speed
-    if keys[pygame.K_DOWN]:
-        dy += player_speed
+    if keys[pygame.K_LEFT]: dx -= player_speed
+    if keys[pygame.K_RIGHT]: dx += player_speed
+    if keys[pygame.K_UP]: dy -= player_speed
+    if keys[pygame.K_DOWN]: dy += player_speed
 
-    # Test de collision
+    # Déplacement avec collisions
     next_rect = pygame.Rect(player_x + dx, player_y + dy, player_width, player_height)
-    can_move = True
-    for block in collision_rects:
-        if next_rect.colliderect(block):
-            can_move = False
-            break
-
-    if can_move:
+    if not any(next_rect.colliderect(block) for block in collision_rects):
         player_x += dx
         player_y += dy
 
-    # Éteindre la lumière si joueur appuie sur espace et est dessus
+    # Éteindre la lumière
     if keys[pygame.K_SPACE] and current_light:
         light_rect = pygame.Rect(current_light[0], current_light[1], 35, 35)
         player_rect = pygame.Rect(player_x, player_y, player_width, player_height)
@@ -147,15 +203,15 @@ while running:
             lights_turned_off += 1
             time.sleep(0.2)
 
-    # Éteindre automatiquement les lumières après 6 secondes
-    for light in lights_on[:]:  # copie pour pouvoir modifier la liste
+    # Timer d’extinction auto
+    for light in lights_on[:]:
         if time.time() - light_timers.get(light, 0) >= 6:
             lights_on.remove(light)
             if light == current_light:
                 current_light = None
             del light_timers[light]
 
-    # Allumer une nouvelle lumière si aucune active
+    # Nouvelle lumière
     if not current_light and not game_over:
         available = [l for l in lights_positions if l not in lights_on]
         if available:
@@ -164,7 +220,7 @@ while running:
             light_timers[new_light] = time.time()
             current_light = new_light
 
-    # Afficher la carte
+    # Affichage carte
     for layer in tmx_data.visible_layers:
         if isinstance(layer, pytmx.TiledTileLayer):
             for x, y, gid in layer:
@@ -172,56 +228,33 @@ while running:
                 if tile:
                     screen.blit(tile, (x * tmx_data.tilewidth, y * tmx_data.tileheight))
 
-    # Ombre
-    darkness = pygame.Surface((1000, 650), pygame.SRCALPHA)
+    # Ombres + lumières
+    darkness = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
     darkness.fill((0, 0, 0, 180))
     for light in lights_on:
         pygame.draw.circle(darkness, (0, 0, 0, 0), (int(light[0]) + 17, int(light[1]) + 17), 70)
+        screen.blit(light_img, (light[0], light[1]))
     screen.blit(darkness, (0, 0))
 
-    # Lumières
-    for light in lights_on:
-        screen.blit(light_img, (light[0], light[1]))
-
-        # Joueur (corps beige, cheveux marrons, yeux blancs)
+    # Joueur
     player_rect = pygame.Rect(player_x, player_y, player_width, player_height)
-    pygame.draw.rect(screen, (245, 222, 179), player_rect)  # Corps beige (Wheat)
-
-    # Cheveux marron
-    hair_height = player_height // 3
-    pygame.draw.rect(screen, (139, 69, 19), (player_x, player_y, player_width, hair_height))
-
-    # Yeux blancs
-    eye_radius = 2
-    eye_offset_x = 3
+    pygame.draw.rect(screen, (245, 222, 179), player_rect)
+    pygame.draw.rect(screen, (139, 69, 19), (player_x, player_y, player_width, player_height // 3))
     eye_y = player_y + player_height // 2
-    pygame.draw.circle(screen, (255, 255, 255), (int(player_x + eye_offset_x), eye_y), eye_radius)
-    pygame.draw.circle(screen, (255, 255, 255), (int(player_x + player_width - eye_offset_x), eye_y), eye_radius)
+    pygame.draw.circle(screen, (255, 255, 255), (int(player_x + 3), eye_y), 2)
+    pygame.draw.circle(screen, (255, 255, 255), (int(player_x + player_width - 3), eye_y), 2)
 
-    # Coordonnées joueur
-    coords_text = font.render(f"Coordonnées: ({player_x:.1f}, {player_y:.1f})", True, (255, 255, 255))
-    screen.blit(coords_text, (10, screen.get_height() - 30))
+    # Infos
+    screen.blit(font.render(f"Lumières éteintes : {lights_turned_off}", True, (255, 255, 255)), (10, 10))
+    screen.blit(font.render(f"Temps restant : {time_left}s", True, (255, 255, 255)), (WIDTH - 180, 10))
 
-    # Score et temps
-    score_text = font.render(f"Lumières éteintes : {lights_turned_off}", True, (255, 255, 255))
-    screen.blit(score_text, (10, 10))
-    timer_text = font.render(f"Temps restant : {time_left}s", True, (255, 255, 255))
-    screen.blit(timer_text, (screen.get_width() - timer_text.get_width() - 10, 10))
-
-    # Fin de partie
     if time_left <= 0 and not game_over:
         game_over = True
-        if lights_turned_off >= 10:
-            result_text = "Victoire !"
-        else:
-            result_text = "Défaite..."
+        result_text = "Victoire !" if lights_turned_off >= 10 else "Défaite..."
         result_rendered = font.render(f"{result_text} Score final : {lights_turned_off}", True, (255, 255, 0))
 
     if game_over:
-        screen.blit(result_rendered, (
-            (screen.get_width() - result_rendered.get_width()) // 2,
-            (screen.get_height() - result_rendered.get_height()) // 2
-        ))
+        screen.blit(result_rendered, ((WIDTH - result_rendered.get_width()) // 2, HEIGHT // 2))
 
     pygame.display.flip()
 
