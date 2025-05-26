@@ -1,10 +1,16 @@
 import pygame
+clock = pygame.time.Clock()
 import pytmx
 import time
 import random
 import sys
-
+import math
 pygame.init()
+
+volume = 0.5  # Valeur par défaut du volume (50%)
+
+child_font = pygame.font.SysFont("Comic Sans MS", 20, bold=True)
+font = pygame.font.SysFont("Arial", 28)
 
 # Fenêtre
 WIDTH, HEIGHT = 1000, 650
@@ -69,87 +75,253 @@ def draw_button(text, x, y, width, height, color, hover_color, action=None):
                             y + (height - text_surf.get_height()) // 2))
 
 def rules_screen():
-    running = True
-    while running:
-        screen.fill((30, 30, 30))
+    rules_running = True
+
+    # Polices
+    title_font = pygame.font.SysFont("Segoe UI", 50, bold=True)
+    text_font = pygame.font.SysFont("Segoe UI", 22)
+    bold_font = pygame.font.SysFont("Segoe UI", 22, bold=True)
+    subtitle_font = pygame.font.SysFont("Segoe UI", 32, italic=True)
+
+    # Couleurs sobres
+    bg_color = (245, 245, 245)       # gris très clair
+    text_color = (40, 40, 40)        # gris foncé
+    highlight_color = (70, 130, 180) # bleu acier
+
+    while rules_running:
+        screen.fill(bg_color)
+
+        # Titre (sans soulignement)
+        title_text = "Règles du jeu"
+        title = title_font.render(title_text, True, text_color)
+        title_x = (WIDTH - title.get_width()) // 2
+        screen.blit(title, (title_x, 40))
+
+        # Règles du jeu (avec mots importants en gras)
         rules = [
-            "But du jeu : éteindre les lumières allumées dans la maison.",
-            "Déplacez-vous avec les flèches directionnelles.",
-            "Appuyez sur ESPACE quand vous êtes sur une lumière pour l’éteindre.",
-            "Vous avez 60 secondes pour éteindre un maximum de lumières.",
-            "",
-            "Appuyez sur ÉCHAP pour revenir au menu."
+            [("But du jeu :", True), (" éteins les lumières inutiles pour économiser l’énergie.", False)],
+            [("Déplace-toi", True), (" avec les flèches du clavier.", False)],
+            [("Quand une lumière est allumée,", False), (" place-toi dessus et appuie sur ESPACE pour l’éteindre.", True)],
+            [("Tu disposes de 60 secondes", True), (" pour éteindre un maximum de lumières.", False)],
+            [("Chaque geste compte", True), (" pour protéger la planète.", False)],
+            [("Au bout de 10 lumières éteintes,", False), (" tu as gagné, mais ne t’arrête pas là !", True)],
         ]
-        for i, line in enumerate(rules):
-            rendered = font.render(line, True, (255, 255, 255))
-            screen.blit(rendered, (50, 100 + i * 30))
+
+        y_start = 100
+        line_spacing = 55
+        for i, line_parts in enumerate(rules):
+            x = (WIDTH - 800) // 2  # centrage approximatif
+            current_x = x
+            for text, is_bold in line_parts:
+                font_to_use = bold_font if is_bold else text_font
+                rendered_text = font_to_use.render(text, True, text_color)
+                screen.blit(rendered_text, (current_x, y_start + i * line_spacing))
+                current_x += rendered_text.get_width()
+
+        # Texte d’instruction pour revenir au menu
+        tip = subtitle_font.render("Appuie sur ÉCHAP pour revenir au menu", True, highlight_color)
+        screen.blit(tip, ((WIDTH - tip.get_width()) // 2, HEIGHT - 80))
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit(); sys.exit()
+                pygame.quit()
+                sys.exit()
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                running = False
+                rules_running = False
 
         pygame.display.flip()
+
+
+def close_options():
+    global current_screen
+    current_screen = "menu"
+    return False  # pour couper la boucle
+
+def draw_text_centered(text, y, size=28, color=(255, 255, 255)):
+    font_local = pygame.font.SysFont("Arial", size)
+    text_surface = font_local.render(text, True, color)
+    x = (WIDTH - text_surface.get_width()) // 2
+    screen.blit(text_surface, (x, y))
+
 
 def options_screen():
-    running = True
-    volume = pygame.mixer.music.get_volume()
+    global volume
+    global options_running
+    options_running = True
+    dragging = False
+    slider_rect = pygame.Rect(300, 250, 200, 20)
 
-    while running:
-        screen.fill((50, 50, 50))
-        title = big_font.render("Options", True, (255, 255, 255))
-        screen.blit(title, ((WIDTH - title.get_width()) // 2, 50))
+    while options_running:
+        screen.fill((30, 30, 60))
+        draw_text_centered("Options", 100, size=40, color=(255, 255, 0))
+        draw_text_centered(f"Volume: {int(volume * 100)}%", 200)
 
-        vol_text = font.render(f"Volume musique : {int(volume * 100)}%", True, (255, 255, 255))
-        screen.blit(vol_text, (WIDTH // 2 - 100, 200))
+        # Slider
+        draw_volume_slider(slider_rect.x, slider_rect.y, slider_rect.width, slider_rect.height, volume)
 
-        draw_button("-", WIDTH // 2 - 80, 240, 40, 40, (100, 100, 100), (150, 150, 150),
-                    lambda: change_volume(-0.1))
-        draw_button("+", WIDTH // 2 + 40, 240, 40, 40, (100, 100, 100), (150, 150, 150),
-                    lambda: change_volume(0.1))
-        draw_button("Retour", WIDTH // 2 - 60, 320, 120, 40, (100, 0, 0), (150, 0, 0),
-                    lambda: exit_screen())
+        # Gestion slider
+        mouse = pygame.mouse.get_pos()
+        click = pygame.mouse.get_pressed()
 
-        volume = pygame.mixer.music.get_volume()
+        if click[0] and slider_rect.collidepoint(mouse):
+            dragging = True
+        if not click[0]:
+            dragging = False
+        if dragging:
+            new_vol = (mouse[0] - slider_rect.x) / slider_rect.width
+            volume = max(0.0, min(1.0, new_vol))
+            pygame.mixer.music.set_volume(volume)
+
+        # Bouton retour
+        draw_rounded_button("Retour", 330, 350, 140, 50,
+                            color=(100, 100, 255),
+                            hover_color=(150, 150, 255),
+                            action=lambda: setattr(sys.modules[__name__], 'options_running', False))
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit(); sys.exit()
+                pygame.quit()
+                exit()
 
-        pygame.display.flip()
+        pygame.display.update()
+        clock.tick(60)
+
+def draw_text(text, x, y, size=28, color=(255, 255, 255)):
+    font_local = pygame.font.SysFont("Arial", size)
+    text_surface = font_local.render(text, True, color)
+    screen.blit(text_surface, (x, y))
+
+def draw_rounded_button(text, x, y, width, height, color, hover_color, action=None):
+    mouse = pygame.mouse.get_pos()
+    click = pygame.mouse.get_pressed()
+    rect = pygame.Rect(x, y, width, height)
+
+    is_hovered = rect.collidepoint(mouse)
+    pygame.draw.rect(screen, (0, 0, 0), rect.move(4, 4), border_radius=15)  # ombre
+    pygame.draw.rect(screen, hover_color if is_hovered else color, rect, border_radius=15)
+
+    text_surf = font.render(text, True, (255, 255, 255))
+    screen.blit(text_surf, (x + (width - text_surf.get_width()) // 2,
+                            y + (height - text_surf.get_height()) // 2))
+
+    if is_hovered and click[0]:
+        pygame.time.delay(200)
+        if action:
+            action()
+
+def draw_volume_slider(x, y, width, height, volume):
+    pygame.draw.rect(screen, (150, 150, 150), (x, y, width, height), border_radius=10)
+    fill_width = int(volume * width)
+    pygame.draw.rect(screen, (100, 200, 100), (x, y, fill_width, height), border_radius=10)
+    pygame.draw.circle(screen, (255, 255, 255), (x + fill_width, y + height // 2), height // 2)
+
+def exit_options():
+    global current_screen
+    current_screen = "menu"
+
 
 def change_volume(amount):
-    volume = pygame.mixer.music.get_volume()
+    global volume
     volume = max(0.0, min(1.0, volume + amount))
     pygame.mixer.music.set_volume(volume)
+
 
 def exit_screen():
     pygame.event.post(pygame.event.Event(pygame.KEYDOWN, {'key': pygame.K_ESCAPE}))
 
-# Écran principal du menu
 def show_main_menu():
     background = pygame.image.load("background.png")
     background = pygame.transform.scale(background, (WIDTH, HEIGHT))
     menu_running = True
 
+    # Variables pour animation titre
+    title_base_size = 40
+    title_anim_time = 0
+
+    # Pour gérer le délai entre clics (anti double clic)
+    click_cooldown = 300  # ms
+    last_click_time = 0
+
     while menu_running:
+        dt = clock.tick(60)
+        title_anim_time += dt / 1000  # secondes
+
         screen.blit(background, (0, 0))
-        title = big_font.render("Jeu des Lumières", True, (255, 255, 255))
+
+        # Animation légère sur la taille du titre
+        anim_scale = 1 + 0.05 * math.sin(title_anim_time * 3)  # oscillation sinusoïdale
+        title_font_size = int(title_base_size * anim_scale)
+        title_font = pygame.font.SysFont("Comic Sans MS", title_font_size, bold=True)
+        title = title_font.render("Jeu des Lumières", True, (255, 255, 255))
         screen.blit(title, ((WIDTH - title.get_width()) // 2, 80))
 
-        draw_button("Jouer", 400, 200, 200, 50, (0, 100, 0), (0, 150, 0), lambda: exit_screen())
-        draw_button("Règles du jeu", 400, 270, 200, 50, (0, 0, 100), (0, 0, 150), rules_screen)
-        draw_button("Options", 400, 340, 200, 50, (100, 100, 0), (150, 150, 0), options_screen)
-        draw_button("Quitter", 400, 410, 200, 50, (100, 0, 0), (150, 0, 0), lambda: pygame.quit() or sys.exit())
+        mouse = pygame.mouse.get_pos()
+        click = pygame.mouse.get_pressed()
+
+        # Liste de boutons : (texte, y, couleur normale, couleur survol, fonction)
+        buttons = [
+            ("Jouer", 200, (0, 100, 0), (0, 180, 0), lambda: exit_screen()),
+            ("Règles du jeu", 270, (0, 0, 100), (0, 0, 180), rules_screen),
+            ("Options", 340, (100, 100, 0), (180, 180, 0), options_screen),
+            ("Quitter", 410, (150, 0, 0), (220, 0, 0), lambda: pygame.quit() or sys.exit())
+        ]
+
+        # Dessin boutons avec agrandissement au survol
+        for text, y, color, hover_color, action in buttons:
+            text_surf = font.render(text, True, (255, 255, 255))
+            width, height = 220, 55
+            x = (WIDTH - width) // 2
+            rect = pygame.Rect(x, y, width, height)
+            is_hovered = rect.collidepoint(mouse)
+
+            # Effet agrandissement sur hover
+            scale = 1.1 if is_hovered else 1.0
+            scaled_width = int(width * scale)
+            scaled_height = int(height * scale)
+            scaled_x = x - (scaled_width - width) // 2
+            scaled_y = y - (scaled_height - height) // 2
+            scaled_rect = pygame.Rect(scaled_x, scaled_y, scaled_width, scaled_height)
+
+            # Ombre
+            pygame.draw.rect(screen, (0, 0, 0), scaled_rect.move(4, 4), border_radius=15)
+            # Bouton
+            pygame.draw.rect(screen, hover_color if is_hovered else color, scaled_rect, border_radius=15)
+
+            # Texte centré sur bouton (avec scaling inversé pour ne pas agrandir le texte)
+            text_pos = (scaled_x + (scaled_width - text_surf.get_width()) // 2,
+                        scaled_y + (scaled_height - text_surf.get_height()) // 2)
+            screen.blit(text_surf, text_pos)
+
+            # Détecter clic avec cooldown
+            current_time = pygame.time.get_ticks()
+            if is_hovered and click[0] and current_time - last_click_time > click_cooldown:
+                last_click_time = current_time
+                pygame.time.delay(150)
+                action()
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit(); sys.exit()
+                pygame.quit()
+                sys.exit()
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 menu_running = False
 
         pygame.display.flip()
+
+
+def draw_text_with_background(text, font, fg_color, bg_color, pos, screen):
+    text_surface = font.render(text, True, fg_color)
+    shadow_surface = font.render(text, True, (0, 0, 0))
+
+    x, y = pos
+    padding = 3  # Reduced padding from 5 to 3
+    rect = text_surface.get_rect(topleft=(x - padding, y - padding))
+    rect.inflate_ip(padding * 2, padding * 2)
+    pygame.draw.rect(screen, bg_color, rect, border_radius=10) # Maybe reduce border_radius too
+
+    screen.blit(shadow_surface, (x + 1, y + 1)) # Adjusted shadow offset
+    screen.blit(text_surface, (x, y))
+
 
 # Lancer le menu
 show_main_menu()
@@ -244,17 +416,25 @@ while running:
     pygame.draw.circle(screen, (255, 255, 255), (int(player_x + 3), eye_y), 2)
     pygame.draw.circle(screen, (255, 255, 255), (int(player_x + player_width - 3), eye_y), 2)
 
-    # Infos
-    screen.blit(font.render(f"Lumières éteintes : {lights_turned_off}", True, (255, 255, 255)), (10, 10))
-    screen.blit(font.render(f"Temps restant : {time_left}s", True, (255, 255, 255)), (WIDTH - 180, 10))
+    draw_text_with_background(f"Lumières éteintes : {lights_turned_off}", child_font, (255, 255, 255), (255, 140, 0),
+                              (10, 10), screen)
+    draw_text_with_background(f"Temps restant : {time_left}s", child_font, (255, 255, 255), (255, 140, 0), (700, 10),
+                              screen)
 
     if time_left <= 0 and not game_over:
         game_over = True
-        result_text = "Victoire !" if lights_turned_off >= 10 else "Défaite..."
-        result_rendered = font.render(f"{result_text} Score final : {lights_turned_off}", True, (255, 255, 0))
+        if lights_turned_off >= 10:
+            result_text = f"Mission accomplie ! Un grand bravo, tu as éteint {lights_turned_off}  !"
+        else:
+            result_text = f"Temps écoulé ! Tu as éteint {lights_turned_off} lumières.  !"
+
+        # Render the result text after it's been determined
+        result_rendered = big_font.render(result_text, True, (255, 255, 0))  # Using big_font for the final message
 
     if game_over:
-        screen.blit(result_rendered, ((WIDTH - result_rendered.get_width()) // 2, HEIGHT // 2))
+        # Center the result text
+        text_rect = result_rendered.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+        screen.blit(result_rendered, text_rect)
 
     pygame.display.flip()
 
