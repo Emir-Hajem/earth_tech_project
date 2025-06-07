@@ -6,13 +6,7 @@ import random
 import sys
 import math
 pygame.init()
-
 volume = 0.5  # Valeur par défaut du volume (50%)
-
-win_img = pygame.image.load("win.png")
-game_over_img = pygame.image.load("gamer-over.png")
-game_over_img = pygame.transform.scale(game_over_img, (1000, 650))
-
 child_font = pygame.font.SysFont("Comic Sans MS", 20, bold=True)
 font = pygame.font.SysFont("Arial", 28)
 
@@ -21,10 +15,15 @@ WIDTH, HEIGHT = 1000, 650
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Maison Jeu")
 
+background_img = pygame.image.load("background.png").convert()
+
 # Musique (exemple)
 pygame.mixer.music.load("background_music.mp3")
 pygame.mixer.music.set_volume(0.5)
 pygame.mixer.music.play(-1)
+
+is_paused = False  # Le jeu n'est pas en pause à l'initialisation.
+
 
 # Charger la carte
 tmx_data = pytmx.load_pygame('map/maison.tmx')
@@ -312,6 +311,51 @@ def show_main_menu():
 
         pygame.display.flip()
 
+def draw_pause_menu():
+    # Affiche un fond transparent sombre
+    pause_overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    pause_overlay.fill((0, 0, 0, 180))  # Fond semi-transparent
+    screen.blit(pause_overlay, (0, 0))
+
+    # Dessine "Pause" au centre
+    pause_font = pygame.font.SysFont("Segoe UI", 50, bold=True)
+    pause_text = pause_font.render("Pause", True, (255, 255, 255))
+    screen.blit(pause_text, ((WIDTH - pause_text.get_width()) // 2, HEIGHT // 3))
+
+    # Dessin des boutons
+    button_width, button_height = 200, 50
+    button_x = (WIDTH - button_width) // 2
+    button_y_start = HEIGHT // 2
+
+    # Boutons
+    buttons = [
+        ("Reprendre", lambda: toggle_pause()),
+        ("Paramètres", options_screen),
+        ("Quitter", lambda: pygame.quit() or sys.exit())
+    ]
+
+    for i, (text, action) in enumerate(buttons):
+        # Position des boutons en colonne
+        button_y = button_y_start + (i * (button_height + 10))
+        rect = pygame.Rect(button_x, button_y, button_width, button_height)
+
+        # Détecter survol et clic
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_click = pygame.mouse.get_pressed()
+
+        if rect.collidepoint(mouse_pos):
+            pygame.draw.rect(screen, (100, 100, 255), rect, border_radius=15)
+            if mouse_click[0]:
+                pygame.time.delay(200)
+                action()  # Exécute l'action liée au bouton
+        else:
+            pygame.draw.rect(screen, (70, 70, 150), rect, border_radius=15)
+
+        # Texte du bouton
+        text_font = pygame.font.SysFont("Arial", 30)
+        text_surface = text_font.render(text, True, (255, 255, 255))
+        screen.blit(text_surface, (rect.x + (rect.width - text_surface.get_width()) // 2,
+                                   rect.y + (rect.height - text_surface.get_height()) // 2))
 
 def draw_text_with_background(text, font, fg_color, bg_color, pos, screen):
     text_surface = font.render(text, True, fg_color)
@@ -325,6 +369,10 @@ def draw_text_with_background(text, font, fg_color, bg_color, pos, screen):
 
     screen.blit(shadow_surface, (x + 1, y + 1)) # Adjusted shadow offset
     screen.blit(text_surface, (x, y))
+
+def toggle_pause():
+    global is_paused
+    is_paused = not is_paused
 
 
 # Lancer le menu
@@ -340,105 +388,180 @@ game_duration = 60
 game_over = False
 result_text = ""
 
-# Boucle principale du jeu
 running = True
 clock = pygame.time.Clock()
+#boucle du jeu
+
+for event in pygame.event.get():
+    if event.type == pygame.QUIT:
+        running = False
+    if event.type == pygame.KEYDOWN:
+        if event.key == pygame.K_ESCAPE:
+            is_paused = not is_paused  # Bascule entre pause et actif
+
 
 while running:
     dt = clock.tick(60)
-    screen.fill((0, 0, 0))
-    current_time = time.time()
-    elapsed_time = int(current_time - start_time)
-    time_left = max(0, game_duration - elapsed_time)
 
+    # Gestion des événements
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:  # Appui sur ECHAP
+                toggle_pause()
 
-    keys = pygame.key.get_pressed()
-    dx = dy = 0
-    if keys[pygame.K_LEFT]: dx -= player_speed
-    if keys[pygame.K_RIGHT]: dx += player_speed
-    if keys[pygame.K_UP]: dy -= player_speed
-    if keys[pygame.K_DOWN]: dy += player_speed
+    # Si le jeu est en pause, afficher le menu pause
+    if is_paused:
+        draw_pause_menu()
+        pygame.display.flip()
+        continue  # Passer le reste de la boucle pour garder le jeu en pause
 
-    # Déplacement avec collisions
-    next_rect = pygame.Rect(player_x + dx, player_y + dy, player_width, player_height)
-    if not any(next_rect.colliderect(block) for block in collision_rects):
-        player_x += dx
-        player_y += dy
+    # Si le jeu n'est pas terminé et actif
+    if not game_over:
+        screen.fill((0, 0, 0))  # Effacer l'écran
 
-    # Éteindre la lumière
-    if keys[pygame.K_SPACE] and current_light:
-        light_rect = pygame.Rect(current_light[0], current_light[1], 35, 35)
-        player_rect = pygame.Rect(player_x, player_y, player_width, player_height)
-        if light_rect.colliderect(player_rect):
-            lights_on.remove(current_light)
-            del light_timers[current_light]
-            current_light = None
-            lights_turned_off += 1
-            time.sleep(0.2)
+        # Temps écoulé
+        current_time = time.time()
+        elapsed_time = int(current_time - start_time)
+        time_left = max(0, game_duration - elapsed_time)
 
-    # Timer d’extinction auto
-    for light in lights_on[:]:
-        if time.time() - light_timers.get(light, 0) >= 6:
-            lights_on.remove(light)
-            lights_turned_off = lights_turned_off - 1
-            if light == current_light:
+        # Vérifier si le temps est écoulé
+        if time_left == 0:
+            game_over = True
+
+        # Gestion des touches (déplacement joueur)
+        keys = pygame.key.get_pressed()
+        dx = dy = 0
+        if keys[pygame.K_LEFT]: dx -= player_speed
+        if keys[pygame.K_RIGHT]: dx += player_speed
+        if keys[pygame.K_UP]: dy -= player_speed
+        if keys[pygame.K_DOWN]: dy += player_speed
+
+        # Déplacement avec gestion des collisions
+        next_rect = pygame.Rect(player_x + dx, player_y + dy, player_width, player_height)
+        if not any(next_rect.colliderect(block) for block in collision_rects):
+            player_x += dx
+            player_y += dy
+
+        # Gestion des lumières
+        if keys[pygame.K_SPACE] and current_light:
+            light_rect = pygame.Rect(current_light[0], current_light[1], 35, 35)
+            player_rect = pygame.Rect(player_x, player_y, player_width, player_height)
+            if light_rect.colliderect(player_rect):
+                lights_on.remove(current_light)
+                del light_timers[current_light]
                 current_light = None
-            del light_timers[light]
+                lights_turned_off += 1
+                time.sleep(0.2)
 
-    # Nouvelle lumière
-    if not current_light and not game_over:
-        available = [l for l in lights_positions if l not in lights_on]
-        if available:
-            new_light = random.choice(available)
-            lights_on.append(new_light)
-            light_timers[new_light] = time.time()
-            current_light = new_light
+        # Timer extinction automatique
+        for light in lights_on[:]:
+            if time.time() - light_timers.get(light, 0) >= 6:
+                lights_on.remove(light)
+                lights_turned_off -= 1
+                if light == current_light:
+                    current_light = None
+                del light_timers[light]
 
-    # Affichage carte
-    for layer in tmx_data.visible_layers:
-        if isinstance(layer, pytmx.TiledTileLayer):
-            for x, y, gid in layer:
-                tile = tmx_data.get_tile_image_by_gid(gid)
-                if tile:
-                    screen.blit(tile, (x * tmx_data.tilewidth, y * tmx_data.tileheight))
+        # Nouveau courant lumineux
+        if not current_light:
+            available = [l for l in lights_positions if l not in lights_on]
+            if available:
+                new_light = random.choice(available)
+                lights_on.append(new_light)
+                light_timers[new_light] = time.time()
+                current_light = new_light
 
-    # Ombres + lumières
-    darkness = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-    darkness.fill((0, 0, 0, 180))
-    for light in lights_on:
-        pygame.draw.circle(darkness, (0, 0, 0, 0), (int(light[0]) + 17, int(light[1]) + 17), 70)
-        screen.blit(light_img, (light[0], light[1]))
-    screen.blit(darkness, (0, 0))
+        # Affichage des graphiques (carte, lumières, joueur, etc.)
+        for layer in tmx_data.visible_layers:
+            if isinstance(layer, pytmx.TiledTileLayer):
+                for x, y, gid in layer:
+                    tile = tmx_data.get_tile_image_by_gid(gid)
+                    if tile:
+                        screen.blit(tile, (x * tmx_data.tilewidth, y * tmx_data.tileheight))
 
-    # Joueur
-    player_rect = pygame.Rect(player_x, player_y, player_width, player_height)
-    pygame.draw.rect(screen, (245, 222, 179), player_rect)
-    pygame.draw.rect(screen, (139, 69, 19), (player_x, player_y, player_width, player_height // 3))
-    eye_y = player_y + player_height // 2
-    pygame.draw.circle(screen, (255, 255, 255), (int(player_x + 3), eye_y), 2)
-    pygame.draw.circle(screen, (255, 255, 255), (int(player_x + player_width - 3), eye_y), 2)
+        # Ombres et lumières
+        darkness = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        darkness.fill((0, 0, 0, 180))
+        for light in lights_on:
+            pygame.draw.circle(darkness, (0, 0, 0, 0), (int(light[0]) + 17, int(light[1]) + 17), 70)
+            screen.blit(light_img, (light[0], light[1]))
+        screen.blit(darkness, (0, 0))
 
-    draw_text_with_background(f"Lumières éteintes : {lights_turned_off}", child_font, (255, 255, 255), (255, 140, 0),
-                              (10, 10), screen)
-    draw_text_with_background(f"Temps restant : {time_left}s", child_font, (255, 255, 255), (255, 140, 0), (700, 10),
-                              screen)
+        # Joueur
+        player_rect = pygame.Rect(player_x, player_y, player_width, player_height)
+        pygame.draw.rect(screen, (245, 222, 179), player_rect)
+        pygame.draw.rect(screen, (139, 69, 19), (player_x, player_y, player_width, player_height // 3))
+        eye_y = player_y + player_height // 2
+        pygame.draw.circle(screen, (255, 255, 255), (int(player_x + 3), eye_y), 2)
+        pygame.draw.circle(screen, (255, 255, 255), (int(player_x + player_width - 3), eye_y), 2)
 
-    if time_left <= 0 and not game_over:
-        game_over = True
+        # Affichage des informations
+        draw_text_with_background(f"Lumières éteintes : {lights_turned_off}", child_font, (255, 255, 255),
+                                  (255, 140, 0),
+                                  (10, 10), screen)
+        draw_text_with_background(f"Temps restant : {time_left}s", child_font, (255, 255, 255), (255, 140, 0),
+                                  (700, 10),
+                                  screen)
+    else:
+        # Affiche fond
+        screen.blit(background_img, (1000, 650))
+
+        # Polices
+        big_font = pygame.font.SysFont("impact", 40, bold=False)
+        score_font = pygame.font.SysFont("comicsansms", 60, italic=True)
+        message_font = pygame.font.SysFont("arial", 35, italic=True)
+        button_font = pygame.font.SysFont("arial", 30, bold=True)
+
+        # Texte selon victoire ou défaite
         if lights_turned_off >= 10:
-            result_text = f"Mission accomplie ! Un grand bravo, tu as éteint {lights_turned_off}  !"
+            title_text = "V I C T O I R E !"
+            title_color = (0, 255, 0)  # vert vif
+            message_text = "Bravo, tu as éteint toutes les lumières !"
         else:
-            result_text = f"Temps écoulé ! Tu as éteint {lights_turned_off} lumières.  !"
+            title_text = "D É F A I T E"
+            title_color = (255, 0, 0)  # rouge vif
+            message_text = "Essaie encore, tu peux mieux faire !"
 
-        # Render the result text after it's been determined
-        result_rendered = big_font.render(result_text, True, (255, 255, 0))  # Using big_font for the final message
+        # Rendu textes
+        title_surface = big_font.render(title_text, True, title_color)
+        score_surface = score_font.render(f"Score : {lights_turned_off}", True, (0, 0, 255))  # bleu
+        message_surface = message_font.render(message_text, True, (255, 255, 255))  # blanc
 
-    if game_over:
-        screen.blit(game_over_img, (0, 0))  # position (0,0) ou change selon la taille
-        pygame.display.flip()  # mettre à jour l'écran
+        # Position
+        center_x = WIDTH // 2
+        title_rect = title_surface.get_rect(center=(center_x, HEIGHT // 3))
+        score_rect = score_surface.get_rect(center=(center_x, HEIGHT // 3 + 90))
+        message_rect = message_surface.get_rect(center=(center_x, HEIGHT // 3 + 150))
+
+        # Blit textes
+        screen.blit(title_surface, title_rect)
+        screen.blit(score_surface, score_rect)
+        screen.blit(message_surface, message_rect)
+
+        # Bouton Quitter
+        button_text = "Quitter"
+        button_color = (200, 0, 0)
+        button_hover_color = (255, 50, 50)
+        button_rect = pygame.Rect(center_x - 70, HEIGHT // 3 + 220, 140, 50)
+
+        # Souris
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_pressed = pygame.mouse.get_pressed()
+
+        # Change couleur si survol
+        if button_rect.collidepoint(mouse_pos):
+            pygame.draw.rect(screen, button_hover_color, button_rect)
+            if mouse_pressed[0]:
+                running = False  # Quitte le jeu si clique
+        else:
+            pygame.draw.rect(screen, button_color, button_rect)
+
+        # Texte bouton centré
+        button_surface = button_font.render(button_text, True, (255, 255, 255))
+        button_text_rect = button_surface.get_rect(center=button_rect.center)
+        screen.blit(button_surface, button_text_rect)
 
     pygame.display.flip()
 
