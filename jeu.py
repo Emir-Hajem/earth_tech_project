@@ -80,40 +80,44 @@ def draw_button(text, x, y, width, height, color, hover_color, action=None):
 def rules_screen():
     rules_running = True
 
+    # Couleurs similaires à celles des options
+    bg_color = (30, 30, 60)  # Couleur sombre
+    text_color = (255, 255, 255)  # Texte blanc
+    highlight_color = (70, 130, 180)  # Bleu acier pour les accents de texte
+
     # Polices
     title_font = pygame.font.SysFont("Segoe UI", 50, bold=True)
     text_font = pygame.font.SysFont("Segoe UI", 22)
     bold_font = pygame.font.SysFont("Segoe UI", 22, bold=True)
-    subtitle_font = pygame.font.SysFont("Segoe UI", 32, italic=True)
-
-    # Couleurs sobres
-    bg_color = (245, 245, 245)       # gris très clair
-    text_color = (40, 40, 40)        # gris foncé
-    highlight_color = (70, 130, 180) # bleu acier
+    subtitle_font = pygame.font.SysFont("Segoe UI", 28, italic=True)
 
     while rules_running:
-        screen.fill(bg_color)
+        screen.fill(bg_color)  # Appliquer le fond sombre
 
-        # Titre (sans soulignement)
+        # Titre des règles
         title_text = "Règles du jeu"
         title = title_font.render(title_text, True, text_color)
         title_x = (WIDTH - title.get_width()) // 2
         screen.blit(title, (title_x, 40))
 
-        # Règles du jeu (avec mots importants en gras)
+        # Ajouter un interligne entre le titre et les règles
+        # Adaptez la valeur `y_start` pour ajuster la distance (ici, augmentée à 120)
+        y_start = 140  # Position de départ pour les règles (augmente pour insérer l'interligne)
+        line_spacing = 55  # Espacement entre chaque ligne des règles
+
+        # Règles énoncées
         rules = [
             [("But du jeu :", True), (" éteins les lumières inutiles pour économiser l’énergie.", False)],
             [("Déplace-toi", True), (" avec les flèches du clavier.", False)],
-            [("Quand une lumière est allumée,", False), (" place-toi dessus et appuie sur ESPACE pour l’éteindre.", True)],
+            [("Quand une lumière est allumée,", False),
+             (" place-toi dessus et appuie sur ESPACE pour l’éteindre.", True)],
             [("Tu disposes de 60 secondes", True), (" pour éteindre un maximum de lumières.", False)],
             [("Chaque geste compte", True), (" pour protéger la planète.", False)],
             [("Au bout de 10 lumières éteintes,", False), (" tu as gagné, mais ne t’arrête pas là !", True)],
         ]
 
-        y_start = 100
-        line_spacing = 55
         for i, line_parts in enumerate(rules):
-            x = (WIDTH - 800) // 2  # centrage approximatif
+            x = (WIDTH - 800) // 2
             current_x = x
             for text, is_bold in line_parts:
                 font_to_use = bold_font if is_bold else text_font
@@ -121,10 +125,11 @@ def rules_screen():
                 screen.blit(rendered_text, (current_x, y_start + i * line_spacing))
                 current_x += rendered_text.get_width()
 
-        # Texte d’instruction pour revenir au menu
+        # Ajouter un texte en bas pour indiquer comment revenir au menu
         tip = subtitle_font.render("Appuie sur ÉCHAP pour revenir au menu", True, highlight_color)
         screen.blit(tip, ((WIDTH - tip.get_width()) // 2, HEIGHT - 80))
 
+        # Gestion des événements
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -133,6 +138,7 @@ def rules_screen():
                 rules_running = False
 
         pygame.display.flip()
+
 
 
 def close_options():
@@ -152,7 +158,8 @@ def options_screen():
     global options_running
     options_running = True
     dragging = False
-    slider_rect = pygame.Rect(300, 250, 200, 20)
+    slider_rect = pygame.Rect((WIDTH - 200) // 2, 250, 200, 20)
+
 
     while options_running:
         screen.fill((30, 30, 60))
@@ -176,7 +183,7 @@ def options_screen():
             pygame.mixer.music.set_volume(volume)
 
         # Bouton retour
-        draw_rounded_button("Retour", 330, 350, 140, 50,
+        draw_rounded_button("Retour", 440, 300, 140, 50,
                             color=(100, 100, 255),
                             hover_color=(150, 150, 255),
                             action=lambda: setattr(sys.modules[__name__], 'options_running', False))
@@ -255,7 +262,7 @@ def show_main_menu():
         anim_scale = 1 + 0.05 * math.sin(title_anim_time * 3)  # oscillation sinusoïdale
         title_font_size = int(title_base_size * anim_scale)
         title_font = pygame.font.SysFont("Comic Sans MS", title_font_size, bold=True)
-        title = title_font.render("Jeu des Lumières", True, (255, 255, 255))
+        title = title_font.render("ENERGY DASH", True, (255, 223, 0))
         screen.blit(title, ((WIDTH - title.get_width()) // 2, 80))
 
         mouse = pygame.mouse.get_pos()
@@ -506,7 +513,7 @@ while running:
                                   screen)
     else:
         # Affiche fond
-        screen.blit(background_img, (1000, 650))
+        screen.fill((30, 30, 30))  # Remplit l'écran avec une couleur unie (R, G, B)
 
         # Polices
         big_font = pygame.font.SysFont("impact", 40, bold=False)
